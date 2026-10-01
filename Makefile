@@ -14,7 +14,9 @@ http_server: $(SRCS) $(HDRS)
 	$(CC) $(CFLAGS) -o $@ $(SRCS)
 
 test: $(TEST_BINS) http_server
-	@set -e; for t in $(TEST_BINS); do ./$$t; done; ./tests/smoke_startup.sh; echo "all tests passed"
+	@set -e; for t in $(TEST_BINS); do ./$$t; done; \
+		./tests/smoke_startup.sh; ./tests/smoke_shutdown.sh; \
+		echo "all tests passed"
 
 tests/test_limits: tests/test_limits.c include/common.h
 	$(CC) $(CFLAGS) -o $@ $<
