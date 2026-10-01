@@ -55,33 +55,42 @@ static int normalize(const char *target, char *rel, size_t rel_size)
     return 0;
 }
 
-int resolve_path(const char *docroot, const char *target, char *out,
-                 size_t out_size)
+static int open_under_root(const char *docroot, char *rel)
 {
-    if (out_size < PATH_MAX)
+    int dirfd = open(docroot, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dirfd < 0)
         return -1;
+    if (rel[0] == '\0') {
+        close(dirfd);
+        return -1;
+    }
 
-    char rel[PATH_MAX];
-    if (normalize(target, rel, sizeof(rel)) != 0)
-        return -1;
+    int f = -1;
+    char *p = rel;
+    for (;;) {
+        char *slash = strchr(p, '/');
+        int last = (slash == NULL);
+        if (slash != NULL)
+            *slash = '\0';
 
-    char candidate[PATH_MAX];
-    int n = snprintf(candidate, sizeof(candidate), "%s/%s", docroot, rel);
-    if (n < 0 || (size_t)n >= sizeof(candidate))
-        return -1;
+        int flags = O_RDONLY | O_NOFOLLOW | O_CLOEXEC |
+                    (last ? 0 : O_DIRECTORY);
+        int next = openat(dirfd, p, flags);
 
-    char root_real[PATH_MAX];
-    if (realpath(docroot, root_real) == NULL)
-        return -1;
-    if (realpath(candidate, out) == NULL)
-        return -1;
-
-    size_t rl = strlen(root_real);
-    if (strncmp(out, root_real, rl) != 0)
-        return -1;
-    if (out[rl] != '\0' && out[rl] != '/')
-        return -1;
-    return 0;
+        if (slash != NULL)
+            *slash = '/';
+        if (next < 0)
+            break;
+        if (last) {
+            f = next;
+            break;
+        }
+        close(dirfd);
+        dirfd = next;
+        p = slash + 1;
+    }
+    close(dirfd);
+    return f;
 }
 
 static const struct {
@@ -128,9 +137,70 @@ const char *content_type_for(const char *path)
     return "application/octet-stream";
 }
 
-static int serve_file(int fd, const char *path, int include_body)
+static int send_file_body(int fd, int f, const struct stat *st,
+                          const char *rel, int head_only)
 {
-    int f = open(path, O_RDONLY | O_NONBLOCK);
+    long long size = (long long)st->st_size;
+
+    if (size > MAX_BUFFERED_FILE) {
+        if (send_ok_head(fd, content_type_for(rel), -1) != 0)
+            return -1;
+        if (head_only)
+            return 0;
+        char buf[65536];
+        for (;;) {
+            ssize_t r = read(f, buf, sizeof(buf));
+            if (r < 0) {
+                if (errno == EINTR)
+                    continue;
+                return -1;
+            }
+            if (r == 0)
+                return 0;
+            if (send_all(fd, buf, (size_t)r) != 0)
+                return -1;
+        }
+    }
+
+    if (head_only)
+        return send_ok_head(fd, content_type_for(rel), size);
+
+    char *buf = NULL;
+    size_t got = 0;
+    if (size > 0) {
+        buf = malloc((size_t)size);
+        if (buf == NULL)
+            return send_error(fd, 500);
+        while (got < (size_t)size) {
+            ssize_t r = read(f, buf + got, (size_t)size - got);
+            if (r < 0) {
+                if (errno == EINTR)
+                    continue;
+                break;
+            }
+            if (r == 0)
+                break;
+            got += (size_t)r;
+        }
+    }
+
+    int rc = send_ok_head(fd, content_type_for(rel), (long long)got);
+    if (rc == 0 && got > 0)
+        rc = send_all(fd, buf, got);
+    free(buf);
+    return rc;
+}
+
+int handle_request(int fd, const struct http_request *req, const char *docroot)
+{
+    if (strcmp(req->method, "GET") != 0 && strcmp(req->method, "HEAD") != 0)
+        return send_error(fd, 405);
+
+    char rel[PATH_MAX];
+    if (normalize(req->target, rel, sizeof(rel)) != 0)
+        return send_error(fd, 404);
+
+    int f = open_under_root(docroot, rel);
     if (f < 0)
         return send_error(fd, 404);
 
@@ -140,47 +210,7 @@ static int serve_file(int fd, const char *path, int include_body)
         return send_error(fd, 404);
     }
 
-    if (send_ok_head(fd, content_type_for(path), (long long)st.st_size) != 0) {
-        close(f);
-        return -1;
-    }
-
-    if (include_body) {
-        char buf[65536];
-        long long remaining = (long long)st.st_size;
-        while (remaining > 0) {
-            size_t chunk = remaining > (long long)sizeof(buf)
-                               ? sizeof(buf)
-                               : (size_t)remaining;
-            ssize_t r = read(f, buf, chunk);
-            if (r < 0) {
-                if (errno == EINTR)
-                    continue;
-                close(f);
-                return -1;
-            }
-            if (r == 0)
-                break;
-            if (send_all(fd, buf, (size_t)r) != 0) {
-                close(f);
-                return -1;
-            }
-            remaining -= r;
-        }
-    }
-
+    int rc = send_file_body(fd, f, &st, rel, strcmp(req->method, "HEAD") == 0);
     close(f);
-    return 0;
-}
-
-int handle_request(int fd, const struct http_request *req, const char *docroot)
-{
-    if (strcmp(req->method, "GET") != 0 && strcmp(req->method, "HEAD") != 0)
-        return send_error(fd, 405);
-
-    char path[PATH_MAX];
-    if (resolve_path(docroot, req->target, path, sizeof(path)) != 0)
-        return send_error(fd, 404);
-
-    return serve_file(fd, path, strcmp(req->method, "HEAD") != 0);
+    return rc;
 }

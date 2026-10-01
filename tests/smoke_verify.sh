@@ -83,6 +83,15 @@ assert "400 Bad Request" in status(r), f"malformed: {status(r)!r}"
 r = req(b"GET / HTTP/1.1\r\nNoColonHere\r\n\r\n")
 assert "400 Bad Request" in status(r), f"bad header: {status(r)!r}"
 
+r = req(b"GET / HTTP/1.1\r\n\r\n")
+assert "400 Bad Request" in status(r), f"no host: {status(r)!r}"
+
+r = req(b"GET / HTTP/1.1\r\nHost: x\r\nHost: y\r\n\r\n")
+assert "400 Bad Request" in status(r), f"dup host: {status(r)!r}"
+
+r = req(b"GET / HTTP/1.1\r\nHost: x\r\nX-Bad: a\x01b\r\n\r\n")
+assert "400 Bad Request" in status(r), f"ctrl byte: {status(r)!r}"
+
 big = b"GET / HTTP/1.1\r\nX-Big: " + b"A" * 20000 + b"\r\n\r\n"
 r = req(big)
 assert "431 Request Header Fields Too Large" in status(r), f"oversized: {r[:60]!r}"

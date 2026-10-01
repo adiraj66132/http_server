@@ -25,6 +25,26 @@ static int is_tchar(unsigned char c)
     return strchr("!#$%&'*+-.^_`|~", c) != NULL && c != '\0';
 }
 
+static int name_is_host(const char *s, size_t n)
+{
+    if (n != 4)
+        return 0;
+    return (s[0] | 0x20) == 'h' && (s[1] | 0x20) == 'o' &&
+           (s[2] | 0x20) == 's' && (s[3] | 0x20) == 't';
+}
+
+static int valid_header_value(const char *s, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '\t')
+            continue;
+        if (c < 0x20 || c == 0x7f)
+            return 0;
+    }
+    return 1;
+}
+
 static int valid_method(const char *s, size_t n)
 {
     if (n == 0 || n >= 16)
@@ -47,7 +67,7 @@ static int valid_header_name(const char *s, size_t n)
     return 1;
 }
 
-static int parse_headers(const char *start, const char *end)
+static int parse_headers(const char *start, const char *end, int *host_count)
 {
     const char *pos = start;
     while (pos < end) {
@@ -56,8 +76,13 @@ static int parse_headers(const char *start, const char *end)
         const char *colon = memchr(pos, ':', (size_t)(line_end - pos));
         if (!colon || colon == pos)
             return 400;
-        if (!valid_header_name(pos, (size_t)(colon - pos)))
+        size_t name_len = (size_t)(colon - pos);
+        if (!valid_header_name(pos, name_len))
             return 400;
+        if (!valid_header_value(colon + 1, (size_t)(line_end - colon - 1)))
+            return 400;
+        if (name_is_host(pos, name_len))
+            (*host_count)++;
         pos = nl ? nl + 2 : end;
     }
     return 0;
@@ -108,9 +133,12 @@ int parse_request(const char *buf, size_t len, struct http_request *req)
     if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0)
         return 505;
 
-    int rc = parse_headers(eol + 2, term);
+    int host_count = 0;
+    int rc = parse_headers(eol + 2, term, &host_count);
     if (rc != 0)
         return rc;
+    if (strcmp(version, "HTTP/1.1") == 0 && host_count != 1)
+        return 400;
 
     memcpy(req->method, buf, method_len);
     req->method[method_len] = '\0';

@@ -38,7 +38,7 @@ static void test_valid_head_http10(void)
 static void test_no_headers(void)
 {
     struct http_request req;
-    assert(parse("GET / HTTP/1.1\r\n\r\n", &req) == 0);
+    assert(parse("GET / HTTP/1.0\r\n\r\n", &req) == 0);
 }
 
 static void test_malformed_request_line(void)
@@ -89,7 +89,7 @@ static void test_valid_long_headers(void)
 {
     struct http_request req;
     char msg[4096];
-    size_t off = (size_t)snprintf(msg, sizeof(msg), "GET / HTTP/1.1\r\n");
+    size_t off = (size_t)snprintf(msg, sizeof(msg), "GET / HTTP/1.1\r\nHost: x\r\n");
     for (int i = 0; i < 50; i++)
         off += (size_t)snprintf(msg + off, sizeof(msg) - off,
                                 "X-Header-%d: value\r\n", i);
@@ -147,6 +147,29 @@ static void test_read_request_oversized(void)
     close(sv[1]);
 }
 
+static void test_host_required_http11(void)
+{
+    struct http_request req;
+    assert(parse("GET / HTTP/1.1\r\n\r\n", &req) == 400);
+    assert(parse("GET / HTTP/1.1\r\nHost: a\r\n\r\n", &req) == 0);
+    assert(parse("GET / HTTP/1.1\r\nHOST: a\r\n\r\n", &req) == 0);
+    assert(parse("GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n", &req) == 400);
+    assert(parse("GET / HTTP/1.0\r\n\r\n", &req) == 0);
+}
+
+static void test_header_value_control_bytes(void)
+{
+    struct http_request req;
+    assert(parse("GET / HTTP/1.1\r\nHost: x\r\nX-A: a\x01"
+                 "b\r\n\r\n", &req) == 400);
+    assert(parse("GET / HTTP/1.1\r\nHost: a\nb\r\n\r\n", &req) == 400);
+    assert(parse("GET / HTTP/1.1\r\nHost: a\rb\r\n\r\n", &req) == 400);
+    assert(parse("GET / HTTP/1.1\r\nHost: x\r\nX-A: a\tb\r\n\r\n", &req) == 0);
+    assert(parse("GET / HTTP/1.1\r\nHost: x\r\nX-A: \xc3\xa9\r\n\r\n",
+                 &req) == 0);
+    assert(parse("GET / HTTP/1.1\r\nHost: x\r\nX-A:\r\n\r\n", &req) == 0);
+}
+
 int main(void)
 {
     test_valid_get();
@@ -156,6 +179,8 @@ int main(void)
     test_target_must_be_origin_form();
     test_bad_version();
     test_malformed_headers();
+    test_host_required_http11();
+    test_header_value_control_bytes();
     test_long_request_line();
     test_valid_long_headers();
     test_read_request_success();

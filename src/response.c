@@ -62,7 +62,16 @@ int send_error(int fd, int code)
 int send_ok_head(int fd, const char *content_type, long long len)
 {
     char buf[512];
-    int n = snprintf(buf, sizeof(buf),
+    int n;
+    if (len < 0)
+        n = snprintf(buf, sizeof(buf),
+                     "HTTP/1.1 200 OK\r\n"
+                     "Content-Type: %s\r\n"
+                     "Connection: close\r\n"
+                     "\r\n",
+                     content_type);
+    else
+        n = snprintf(buf, sizeof(buf),
                      "HTTP/1.1 200 OK\r\n"
                      "Content-Type: %s\r\n"
                      "Content-Length: %lld\r\n"
