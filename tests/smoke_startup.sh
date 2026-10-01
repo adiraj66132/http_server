@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-[ -x ./http_server ] || { echo "http_server not built" >&2; exit 1; }
+SERVER=${SERVER:-./http_server}
+[ -x "$SERVER" ] || { echo "http_server not built" >&2; exit 1; }
 
 if ./http_server --port abc >/dev/null 2>&1; then
     echo "expected nonzero exit for invalid port" >&2
@@ -9,7 +10,7 @@ if ./http_server --port abc >/dev/null 2>&1; then
 fi
 
 PORT=$((18000 + $$ % 1000))
-./http_server --port "$PORT" --root . 2>/dev/null &
+"$SERVER" --port "$PORT" --root . 2>/dev/null &
 srv=$!
 trap 'kill $srv 2>/dev/null || true; wait $srv 2>/dev/null || true' EXIT
 

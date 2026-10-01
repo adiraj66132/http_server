@@ -1,10 +1,11 @@
 #!/bin/sh
 set -e
 
-[ -x ./http_server ] || { echo "http_server not built" >&2; exit 1; }
+SERVER=${SERVER:-./http_server}
+[ -x "$SERVER" ] || { echo "http_server not built" >&2; exit 1; }
 
 PORT=$((19000 + $$ % 1000))
-./http_server --port "$PORT" --root tests/fixtures 2>/dev/null &
+"$SERVER" --port "$PORT" --root tests/fixtures 2>/dev/null &
 srv=$!
 trap 'if [ -n "$srv" ]; then kill "$srv" 2>/dev/null || true; fi' EXIT
 
@@ -67,7 +68,7 @@ set -e
 srv=
 [ "$status" -eq 0 ] || { echo "SIGINT exit status $status, expected 0"; exit 1; }
 
-./http_server --port "$PORT" --root tests/fixtures 2>/dev/null &
+"$SERVER" --port "$PORT" --root tests/fixtures 2>/dev/null &
 srv=$!
 i=0
 while [ $i -lt 50 ]; do

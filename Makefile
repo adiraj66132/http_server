@@ -15,8 +15,11 @@ http_server: $(SRCS) $(HDRS)
 
 test: $(TEST_BINS) http_server
 	@set -e; for t in $(TEST_BINS); do ./$$t; done; \
-		./tests/smoke_startup.sh; ./tests/smoke_shutdown.sh; \
-		echo "all tests passed"
+		./tests/smoke_startup.sh; ./tests/smoke_verify.sh; \
+		./tests/smoke_shutdown.sh; echo "all tests passed"
+
+check: http_server
+	./tests/check.sh
 
 tests/test_limits: tests/test_limits.c include/common.h
 	$(CC) $(CFLAGS) -o $@ $<
@@ -34,4 +37,4 @@ tests/test_static: tests/test_static.c src/static_files.c src/response.c \
 clean:
 	rm -f $(TEST_BINS) http_server
 
-.PHONY: all test clean
+.PHONY: all test check clean

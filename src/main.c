@@ -20,6 +20,15 @@ static void on_signal(int sig)
     running = 0;
 }
 
+static void drain_and_close(int fd)
+{
+    shutdown(fd, SHUT_WR);
+    char buf[4096];
+    while (recv(fd, buf, sizeof(buf), MSG_DONTWAIT) > 0)
+        ;
+    close(fd);
+}
+
 int main(int argc, char **argv)
 {
     signal(SIGPIPE, SIG_IGN);
@@ -57,7 +66,7 @@ int main(int argc, char **argv)
             send_error(cfd, rc);
         else
             handle_request(cfd, &req, cfg.docroot);
-        close(cfd);
+        drain_and_close(cfd);
     }
 
     close(lfd);
