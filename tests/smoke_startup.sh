@@ -26,9 +26,10 @@ for _ in range(50):
 else:
     sys.exit("server never listened")
 s.settimeout(2)
+s.sendall(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
 data = s.recv(100)
 if data != b"":
-    sys.exit(f"expected immediate close, got {data!r}")
+    sys.exit(f"expected close after request, got {data!r}")
 s.close()
 EOF
 

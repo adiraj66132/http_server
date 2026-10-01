@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "parse.h"
 #include "startup.h"
 
 int main(int argc, char **argv)
@@ -26,6 +27,8 @@ int main(int argc, char **argv)
             fprintf(stderr, "accept: %s\n", strerror(errno));
             break;
         }
+        struct http_request req;
+        (void)read_request(cfd, &req);
         close(cfd);
     }
 
