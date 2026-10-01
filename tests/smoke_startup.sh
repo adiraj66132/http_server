@@ -1,0 +1,35 @@
+#!/bin/sh
+set -e
+
+[ -x ./http_server ] || { echo "http_server not built" >&2; exit 1; }
+
+if ./http_server --port abc >/dev/null 2>&1; then
+    echo "expected nonzero exit for invalid port" >&2
+    exit 1
+fi
+
+PORT=$((18000 + $$ % 1000))
+./http_server --port "$PORT" --root . 2>/dev/null &
+srv=$!
+trap 'kill $srv 2>/dev/null || true; wait $srv 2>/dev/null || true' EXIT
+
+python3 - "$PORT" <<'EOF'
+import socket, sys, time
+
+port = int(sys.argv[1])
+for _ in range(50):
+    try:
+        s = socket.create_connection(("127.0.0.1", port), timeout=1)
+        break
+    except OSError:
+        time.sleep(0.1)
+else:
+    sys.exit("server never listened")
+s.settimeout(2)
+data = s.recv(100)
+if data != b"":
+    sys.exit(f"expected immediate close, got {data!r}")
+s.close()
+EOF
+
+echo "smoke ok"
