@@ -7,7 +7,7 @@ SERVER=${SERVER:-./http_server}
 PORT=$((19000 + $$ % 1000))
 "$SERVER" --port "$PORT" --root tests/fixtures 2>/dev/null &
 srv=$!
-trap 'if [ -n "$srv" ]; then kill "$srv" 2>/dev/null || true; fi' EXIT
+trap 'if [ -n "$srv" ]; then kill "$srv" 2>/dev/null || true; fi; if [ -n "$idle" ]; then kill "$idle" 2>/dev/null || true; fi' EXIT
 
 code=000
 i=0
@@ -56,6 +56,26 @@ wait_for_exit()
     return 1
 }
 
+python3 - "$PORT" <<'EOF'
+import socket, sys
+s = socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=3)
+s.settimeout(8)
+data = s.recv(100)
+assert data.startswith(b"HTTP/1.1 400"), \
+    f"expected 400 timeout response, got {data!r}"
+s.close()
+EOF
+code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/hello.txt")
+[ "$code" = "200" ] || { echo "server unusable after idle client"; exit 1; }
+
+python3 - "$PORT" <<'EOF' &
+import socket, sys, time
+s = socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=3)
+time.sleep(60)
+EOF
+idle=$!
+sleep 0.5
+
 kill -INT "$srv"
 if ! wait_for_exit; then
     echo "server did not exit after SIGINT"
@@ -67,6 +87,8 @@ status=$?
 set -e
 srv=
 [ "$status" -eq 0 ] || { echo "SIGINT exit status $status, expected 0"; exit 1; }
+kill "$idle" 2>/dev/null || true
+idle=
 
 "$SERVER" --port "$PORT" --root tests/fixtures 2>/dev/null &
 srv=$!

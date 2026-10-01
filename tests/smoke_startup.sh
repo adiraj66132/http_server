@@ -10,6 +10,27 @@ if ./http_server --port abc >/dev/null 2>&1; then
 fi
 
 PORT=$((18000 + $$ % 1000))
+
+"$SERVER" --port "$PORT" --root /nonexistent-httpd-root-$$ 2>/dev/null &
+bad=$!
+sleep 0.5
+if kill -0 "$bad" 2>/dev/null; then
+    kill "$bad" 2>/dev/null || true
+    echo "expected startup failure for nonexistent document root" >&2
+    exit 1
+fi
+wait "$bad" 2>/dev/null || true
+
+"$SERVER" --port "$PORT" --root tests/fixtures/hello.txt 2>/dev/null &
+bad=$!
+sleep 0.5
+if kill -0 "$bad" 2>/dev/null; then
+    kill "$bad" 2>/dev/null || true
+    echo "expected startup failure for file document root" >&2
+    exit 1
+fi
+wait "$bad" 2>/dev/null || true
+
 "$SERVER" --port "$PORT" --root . 2>/dev/null &
 srv=$!
 trap 'kill $srv 2>/dev/null || true; wait $srv 2>/dev/null || true' EXIT

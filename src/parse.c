@@ -127,11 +127,8 @@ int read_request(int fd, struct http_request *req)
 
     for (;;) {
         ssize_t n = recv(fd, buf + total, MAX_HEADER_BYTES - total, 0);
-        if (n < 0) {
-            if (errno == EINTR)
-                continue;
+        if (n < 0)
             return 400;
-        }
         if (n == 0)
             return 400;
         total += (size_t)n;

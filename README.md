@@ -36,8 +36,8 @@ Example:
 curl http://127.0.0.1:8000/index.html
 ```
 
-Invalid options, ports, or socket failures print an error to stderr and exit
-non-zero.
+Invalid options, invalid ports, a bad document root (nonexistent or not a
+directory), or socket failures print an error to stderr and exit non-zero.
 
 ## Supported behavior
 
@@ -56,9 +56,13 @@ non-zero.
 - Path traversal is blocked twice: `..` segments are normalized lexically and
   never allowed above the root, and the final `realpath()` must stay inside
   the `realpath()` of the document root (also stops symlink escapes).
+- Each accepted connection gets 5-second read/write timeouts: a client that
+  stalls mid-request is answered `400` and disconnected, so one idle socket
+  cannot freeze the server.
 - `SIGINT`/`SIGTERM` shut the server down cleanly: the current connection
-  finishes, the listening socket closes, exit status 0. Client disconnects and
-  interrupted syscalls never crash the server.
+  finishes (a stalled one is cut off by the read timeout), the listening
+  socket closes, exit status 0. Client disconnects and interrupted syscalls
+  never crash the server.
 
 ## Tests
 
@@ -79,7 +83,8 @@ symlinks), fd leaks, signal shutdown, and the full curl/raw-socket matrix.
   served; encoded traversal sequences are never decoded.
 - No directory index: requesting a directory returns `404`.
 - No `Range`, conditional (`If-Modified-Since`), or caching headers.
-- Shutdown waits for the in-flight connection; a client that stalls forever
-  will delay exit (bounded by its own connection, not the listener).
+- `realpath` containment is checked before `open`, so a writer with access to
+  the document root could race a component into a symlink between the two
+  (TOCTOU); full mitigation needs an `openat`/`O_NOFOLLOW` chain.
 - Response headers per HTTP/1.1 are sent regardless of whether the client
   asked for HTTP/1.0.
