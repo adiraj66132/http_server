@@ -1,14 +1,19 @@
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include "parse.h"
+#include "response.h"
+#include "static_files.h"
 #include "startup.h"
 
 int main(int argc, char **argv)
 {
+    signal(SIGPIPE, SIG_IGN);
+
     struct server_config cfg;
     if (parse_args(argc, argv, &cfg) != 0)
         return 1;
@@ -28,7 +33,11 @@ int main(int argc, char **argv)
             break;
         }
         struct http_request req;
-        (void)read_request(cfd, &req);
+        int rc = read_request(cfd, &req);
+        if (rc != 0)
+            send_error(cfd, rc);
+        else
+            handle_request(cfd, &req, cfg.docroot);
         close(cfd);
     }
 

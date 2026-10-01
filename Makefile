@@ -1,10 +1,12 @@
 CC ?= cc
 CFLAGS ?= -Wall -Wextra -std=c11 -g -Iinclude
 
-SRCS := src/main.c src/startup.c src/parse.c
-HDRS := include/common.h include/startup.h include/parse.h
+SRCS := src/main.c src/startup.c src/parse.c src/response.c src/static_files.c
+HDRS := include/common.h include/startup.h include/parse.h include/response.h \
+	include/static_files.h
 
-TEST_BINS := tests/test_limits tests/test_startup tests/test_parse
+TEST_BINS := tests/test_limits tests/test_startup tests/test_parse \
+	tests/test_static
 
 all: http_server
 
@@ -22,6 +24,10 @@ tests/test_startup: tests/test_startup.c src/startup.c include/startup.h
 
 tests/test_parse: tests/test_parse.c src/parse.c include/parse.h
 	$(CC) $(CFLAGS) -o $@ tests/test_parse.c src/parse.c
+
+tests/test_static: tests/test_static.c src/static_files.c src/response.c \
+		include/static_files.h include/response.h include/parse.h
+	$(CC) $(CFLAGS) -o $@ tests/test_static.c src/static_files.c src/response.c
 
 clean:
 	rm -f $(TEST_BINS) http_server

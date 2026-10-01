@@ -27,9 +27,14 @@ else:
     sys.exit("server never listened")
 s.settimeout(2)
 s.sendall(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
-data = s.recv(100)
-if data != b"":
-    sys.exit(f"expected close after request, got {data!r}")
+data = b""
+while True:
+    chunk = s.recv(4096)
+    if not chunk:
+        break
+    data += chunk
+if not data.startswith(b"HTTP/1.1 "):
+    sys.exit(f"expected HTTP response, got {data!r}")
 s.close()
 EOF
 
