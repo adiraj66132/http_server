@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>~sockets' Homepage - Networking & HTTP in C</title>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#2f5f9e; --panel:#d4e0f0; --ink:#0a1a33; --link:#0a3d91; --vlink:#4a5f8a;
+  --hd:#e6f0ff; --txt:#ffffff; --code-bg:#0b2447; --code-fg:#b8d8ff; --accent:#7fb0ff;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1d3f6e;--panel:#b9c8de}}
+:root[data-theme="dark"]{--bg:#1d3f6e;--panel:#b9c8de}
+body{
+  margin:0;background-color:var(--bg);
+  background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 2px,transparent 2px 4px);
+  color:var(--txt);font-family:"Times New Roman",Times,serif;font-size:18px;line-height:1.45;
+}
+.wrap{max-width:860px;margin:0 auto;padding:10px}
+h1{font-family:"Comic Sans MS","Comic Sans",cursive,sans-serif;color:var(--hd);text-align:center;font-size:2.2em;margin:.3em 0;text-shadow:3px 3px #0b2447}
+h2{font-family:"Comic Sans MS","Comic Sans",cursive,sans-serif;color:var(--hd);margin:0 0 .4em}
+h3{color:#bcd8ff;margin:1em 0 .2em}
+.rainbow{height:6px;border:0;background:#9cc0f0;border-top:2px solid #fff;border-bottom:2px solid #0b2447;margin:12px 0}
+.marq{background:#0b2447;color:#bcd8ff;font-family:"Courier New",monospace;border:2px inset #7f9cc4;padding:3px}
+.box{background:var(--panel);color:var(--ink);border:3px outset #eaf2ff;padding:12px 16px;margin:14px 0}
+.box h2{color:#0b3a7a}
+.box h3{color:#1f4f99}
+a{color:var(--link)} a:visited{color:var(--vlink)}
+nav{text-align:center;background:#0b2447;border:3px ridge #7fb0ff;padding:8px}
+nav a{color:#cfe4ff;margin:0 8px;white-space:nowrap}
+.blink{animation:b 1s steps(2,start) infinite;color:#ffffff;font-weight:bold}
+@keyframes b{to{visibility:hidden}}
+@media (prefers-reduced-motion:reduce){.blink{animation:none}}
+pre{background:var(--code-bg);color:var(--code-fg);font-family:"Courier New",Courier,monospace;font-size:14px;line-height:1.35;padding:10px;border:2px inset #7f9cc4;overflow-x:auto;max-width:100%;margin:8px 0}
+code{font-family:"Courier New",monospace;background:#f3f8ff;color:#0b3a7a;padding:0 3px}
+.box pre code{background:none;color:inherit;padding:0}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;background:#f3f8ff;color:#0a1a33}
+th,td{border:2px solid #1f4f99;padding:4px 8px;text-align:left;vertical-align:top}
+th{background:#1f4f99;color:#fff}
+.badge{display:inline-block;border:2px outset #e3ecf8;background:#e3ecf8;color:#0a1a33;font:11px Arial,sans-serif;padding:2px 6px;margin:2px}
+.ctr{text-align:center}
+.cnt{font-family:"Courier New",monospace;background:#0b2447;color:#bcd8ff;padding:2px 6px;border:2px inset #7f9cc4;letter-spacing:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="marq"><marquee scrollamount="5">*** WELCOME TO MY HOMEPAGE *** BEST VIEWED IN NETSCAPE NAVIGATOR 3.0 AT 800x600 *** SIGN MY GUESTBOOK *** </marquee></div>
+
+<h1>~ Networking &amp; HTTP in C ~</h1>
+<p class="ctr"><span class="blink">NEW!</span> Build your own web server from scratch!</p>
+<hr class="rainbow">
+
+<nav>
+  [ <a href="#net">Networking 101</a> ]
+  [ <a href="#http">How HTTP Works</a> ]
+  [ <a href="#plan">The Plan</a> ]
+  [ <a href="#code">The C Code</a> ]
+  [ <a href="#run">Compile &amp; Run</a> ]
+  [ <a href="#next">Level Up</a> ]
+</nav>
+
+<div class="box" id="net">
+<h2>Networking 101</h2>
+<p>A network is just computers sending bytes to each other. To keep this sane, we split the job into <b>layers</b>. Each layer only talks to the layer above and below it.</p>
+<div class="tbl"><table>
+<tr><th>Layer</th><th>Job</th><th>Examples</th></tr>
+<tr><td>Application</td><td>What the programs say to each other</td><td>HTTP, DNS, SMTP, FTP</td></tr>
+<tr><td>Transport</td><td>Delivers data to the right program, optionally reliably</td><td>TCP, UDP</td></tr>
+<tr><td>Internet</td><td>Routes packets across networks</td><td>IP (IPv4, IPv6)</td></tr>
+<tr><td>Link</td><td>Moves frames on one local wire or radio</td><td>Ethernet, Wi-Fi</td></tr>
+</table></div>
+
+<h3>Key ideas</h3>
+<ul>
+<li><b>IP address</b>: the address of a machine, like <code>192.168.1.20</code>. <code>127.0.0.1</code> always means "this computer" (localhost).</li>
+<li><b>Port</b>: a number from 0 to 65535 that picks a program on that machine. HTTP defaults to 80, HTTPS to 443. Ports below 1024 need admin rights on Linux, so we use 8080.</li>
+<li><b>TCP</b>: reliable, ordered stream of bytes. It does a three-way handshake (SYN, SYN-ACK, ACK) first, and resends lost packets. Web pages use it.</li>
+<li><b>UDP</b>: fire-and-forget packets, no guarantees. Good for games and voice.</li>
+<li><b>DNS</b>: the phone book. It turns <code>example.com</code> into an IP address.</li>
+<li><b>Client / Server</b>: the server waits for connections. The client (your browser) starts them.</li>
+<li><b>Socket</b>: the handle your program uses to talk over the network. In C on Unix a socket is a file descriptor, so you can <code>read</code> and <code>write</code> it like a file.</li>
+<li><b>Byte order</b>: the network sends numbers big-endian. Use <code>htons()</code> and <code>htonl()</code> to convert before putting a port or address in a struct.</li>
+</ul>
+</div>
+
+<hr class="rainbow">
+
+<div class="box" id="http">
+<h2>How HTTP Works</h2>
+<p>HTTP is a plain-text conversation on top of TCP. The client sends a <b>request</b>, the server sends back a <b>response</b>. That's all of it. You can even type it by hand with <code>telnet localhost 8080</code>.</p>
+
+<h3>A request</h3>
+<pre><code>GET /index.html HTTP/1.1\r\n
+Host: localhost:8080\r\n
+User-Agent: Mozilla/3.0 (Win95; I)\r\n
+\r\n</code></pre>
+<p>Line 1 is the <b>request line</b>: method, path, version. Then headers, one per line. A blank line (<code>\r\n\r\n</code>) ends the headers.</p>
+
+<h3>A response</h3>
+<pre><code>HTTP/1.1 200 OK\r\n
+Content-Type: text/html\r\n
+Content-Length: 44\r\n
+Connection: close\r\n
+\r\n
+&lt;html&gt;&lt;body&gt;&lt;h1&gt;Hello!&lt;/h1&gt;&lt;/body&gt;&lt;/html&gt;</code></pre>
+<p>Status line, headers, blank line, then the body. <code>Content-Length</code> must equal the body size in bytes, or the browser will hang or cut the page off.</p>
+
+<h3>Status codes you will use</h3>
+<div class="tbl"><table>
+<tr><th>Code</th><th>Meaning</th></tr>
+<tr><td>200 OK</td><td>Here is your page</td></tr>
+<tr><td>301 / 302</td><td>It moved, look at the Location header</td></tr>
+<tr><td>400 Bad Request</td><td>I could not understand that</td></tr>
+<tr><td>403 Forbidden</td><td>You are not allowed</td></tr>
+<tr><td>404 Not Found</td><td>No such file</td></tr>
+<tr><td>405 Method Not Allowed</td><td>I only do GET</td></tr>
+<tr><td>500 Internal Server Error</td><td>My bad</td></tr>
+</table></div>
+</div>
+
+<hr class="rainbow">
+
+<div class="box" id="plan">
+<h2>The Plan: a server in 8 steps</h2>
+<p>Every TCP server in C follows the same recipe. Memorize it and you can write one in your sleep.</p>
+<ol>
+<li><code>socket()</code> creates the endpoint. Use <code>AF_INET</code> for IPv4 and <code>SOCK_STREAM</code> for TCP.</li>
+<li><code>setsockopt(SO_REUSEADDR)</code> lets you restart the server right away instead of waiting for "Address already in use" to clear.</li>
+<li>Fill in a <code>struct sockaddr_in</code> with the family, the IP (<code>INADDR_ANY</code> means all interfaces) and the port, in network byte order.</li>
+<li><code>bind()</code> attaches the socket to that address and port.</li>
+<li><code>listen()</code> marks it as a server socket. The second argument is the queue length for waiting clients.</li>
+<li><code>accept()</code> blocks until a client connects, then returns a <b>new</b> socket just for that client.</li>
+<li><code>recv()</code> the request, parse it, and <code>send()</code> the response. Always send the headers first, then the body.</li>
+<li><code>close()</code> the client socket and go back to step 6. The loop never ends.</li>
+</ol>
+<p>Always check return values. Almost every one of these calls returns <code>-1</code> on failure, and <code>perror()</code> will tell you why.</p>
+</div>
+
+<hr class="rainbow">
+
+<div class="box" id="code">
+<h2>The C Code</h2>
+<p>Save this as <code>server.c</code>. It serves real files from the current folder, handles only <code>GET</code>, and blocks path tricks like <code>../</code>.</p>
+<pre><code>#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;signal.h&gt;
+#include &lt;arpa/inet.h&gt;
+#include &lt;netinet/in.h&gt;
+#include &lt;sys/socket.h&gt;
+
+#define PORT     8080
+#define BUF_SIZE 4096
+
+/* send a whole buffer, even if send() writes only part of it */
+static int send_all(int fd, const char *data, size_t len) {
+    while (len &gt; 0) {
+        ssize_t n = send(fd, data, len, 0);
+        if (n &lt;= 0) return -1;
+        data += n;
+        len  -= (size_t)n;
+    }
+    return 0;
+}
+
+static const char *mime_type(const char *path) {
+    const char *dot = strrchr(path, '.');
+    if (!dot) return "application/octet-stream";
+    if (!strcmp(dot, ".html")) return "text/html";
+    if (!strcmp(dot, ".css"))  return "text/css";
+    if (!strcmp(dot, ".js"))   return "text/javascript";
+    if (!strcmp(dot, ".txt"))  return "text/plain";
+    if (!strcmp(dot, ".png"))  return "image/png";
+    if (!strcmp(dot, ".jpg"))  return "image/jpeg";
+    if (!strcmp(dot, ".gif"))  return "image/gif";
+    return "application/octet-stream";
+}
+
+static void send_error(int fd, int code, const char *text) {
+    char body[128], head[256];
+    int bl = snprintf(body, sizeof body,
+        "&lt;h1&gt;%d %s&lt;/h1&gt;", code, text);
+    int hl = snprintf(head, sizeof head,
+        "HTTP/1.1 %d %s\r\n"
+        "Content-Type: text/html\r\n"
+        "Content-Length: %d\r\n"
+        "Connection: close\r\n\r\n", code, text, bl);
+    send_all(fd, head, (size_t)hl);
+    send_all(fd, body, (size_t)bl);
+}
+
+static void handle_client(int fd) {
+    char req[BUF_SIZE];
+    ssize_t n = recv(fd, req, sizeof req - 1, 0);
+    if (n &lt;= 0) return;
+    req[n] = '\0';
+
+    /* parse the request line: METHOD PATH VERSION */
+    char method[16], path[512], version[16];
+    if (sscanf(req, "%15s %511s %15s", method, path, version) != 3) {
+        send_error(fd, 400, "Bad Request");
+        return;
+    }
+    printf("%s %s\n", method, path);
+
+    if (strcmp(method, "GET") != 0) {
+        send_error(fd, 405, "Method Not Allowed");
+        return;
+    }
+
+    /* security: refuse anything trying to climb out of our folder */
+    if (strstr(path, "..") || path[0] != '/') {
+        send_error(fd, 403, "Forbidden");
+        return;
+    }
+
+    /* "/" means index.html; drop any ?query part */
+    char *q = strchr(path, '?');
+    if (q) *q = '\0';
+    if (!strcmp(path, "/")) strcpy(path, "/index.html");
+
+    char file[600];
+    snprintf(file, sizeof file, ".%s", path);   /* "./index.html" */
+
+    FILE *f = fopen(file, "rb");
+    if (!f) { send_error(fd, 404, "Not Found"); return; }
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    rewind(f);
+
+    char head[256];
+    int hl = snprintf(head, sizeof head,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: %s\r\n"
+        "Content-Length: %ld\r\n"
+        "Connection: close\r\n\r\n", mime_type(file), size);
+    send_all(fd, head, (size_t)hl);
+
+    char chunk[BUF_SIZE];
+    size_t got;
+    while ((got = fread(chunk, 1, sizeof chunk, f)) &gt; 0)
+        if (send_all(fd, chunk, got) &lt; 0) break;
+    fclose(f);
+}
+
+int main(void) {
+    signal(SIGPIPE, SIG_IGN);   /* don't die if a browser hangs up */
+
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd &lt; 0) { perror("socket"); return 1; }
+
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &amp;opt, sizeof opt);
+
+    struct sockaddr_in addr;
+    memset(&amp;addr, 0, sizeof addr);
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port        = htons(PORT);
+
+    if (bind(server_fd, (struct sockaddr *)&amp;addr, sizeof addr) &lt; 0) {
+        perror("bind"); return 1;
+    }
+    if (listen(server_fd, 10) &lt; 0) { perror("listen"); return 1; }
+
+    printf("Listening on http://localhost:%d/\n", PORT);
+
+    for (;;) {
+        int client = accept(server_fd, NULL, NULL);
+        if (client &lt; 0) { perror("accept"); continue; }
+        handle_client(client);
+        close(client);
+    }
+}</code></pre>
+
+<h3>How the pieces fit</h3>
+<ul>
+<li><b>send_all</b>: <code>send()</code> may write fewer bytes than you asked. Looping until everything is out is not optional.</li>
+<li><b>handle_client</b>: reads once, parses the request line with <code>sscanf</code>, checks the method, cleans the path, opens the file and streams it in chunks so big files do not need big memory.</li>
+<li><b>Path check</b>: without the <code>..</code> test, a request for <code>/../../etc/passwd</code> would leak files. This is the classic path traversal bug.</li>
+<li><b>Connection: close</b>: keeps things simple. One request per connection, then we hang up.</li>
+</ul>
+</div>
+
+<hr class="rainbow">
+
+<div class="box" id="run">
+<h2>Compile &amp; Run</h2>
+<pre><code>$ gcc -Wall -Wextra -O2 -o server server.c
+$ echo "&lt;h1&gt;Hello from C!&lt;/h1&gt;" &gt; index.html
+$ ./server
+Listening on http://localhost:8080/</code></pre>
+<p>Now open <code>http://localhost:8080/</code> in a browser. Or test from another terminal:</p>
+<pre><code>$ curl -i http://localhost:8080/
+$ curl -i http://localhost:8080/nope.html     # 404
+$ curl -i -X POST http://localhost:8080/      # 405</code></pre>
+<p>Want to see the raw conversation? Try <code>telnet localhost 8080</code>, type <code>GET / HTTP/1.1</code> and press Enter twice.</p>
+<p><b>Windows users:</b> this code uses POSIX sockets. Use WSL, or port it to Winsock (<code>#include &lt;winsock2.h&gt;</code>, call <code>WSAStartup()</code>, use <code>closesocket()</code>).</p>
+</div>
+
+<hr class="rainbow">
+
+<div class="box" id="next">
+<h2>Level Up</h2>
+<p>This server handles one visitor at a time. That is fine for learning, and terrible for a busy site. Things to try next:</p>
+<ul>
+<li><b>Concurrency</b>: call <code>fork()</code> after <code>accept()</code> (child handles the client, parent closes it), or spawn a <code>pthread</code> per connection. For serious load, learn <code>poll()</code> or <code>epoll()</code>.</li>
+<li><b>Read the full request</b>: loop on <code>recv()</code> until you see <code>\r\n\r\n</code>. One <code>recv()</code> can return a partial request.</li>
+<li><b>Keep-Alive</b>: reuse a connection for many requests instead of closing every time.</li>
+<li><b>More methods</b>: HEAD is easy. POST needs you to read <code>Content-Length</code> bytes of body.</li>
+<li><b>Hardening</b>: add read timeouts (<code>SO_RCVTIMEO</code>), cap request sizes, resolve paths with <code>realpath()</code>, and drop privileges if you ever bind port 80.</li>
+<li><b>HTTPS</b>: wrap the socket with OpenSSL or mbedTLS. Never roll your own crypto.</li>
+</ul>
+<p>Good reading: <i>Beej's Guide to Network Programming</i> (free online), and RFC 9110 / 9112 for the real HTTP rules.</p>
+</div>
+
+<hr class="rainbow">
+
+<div class="ctr">
+<p>You are visitor number <span class="cnt">001337</span></p>
+<p>
+<span class="badge">Made with Notepad</span>
+<span class="badge">Netscape Now!</span>
+<span class="badge">Best on 800x600</span>
+<span class="badge">No frames!</span>
+</p>
+<p><span class="blink">UNDER CONSTRUCTION</span></p>
+<p style="font-size:14px">Last updated: October 2, 2026 &nbsp;|&nbsp; <a href="#net" style="color:#cfe4ff">Back to top</a></p>
+</div>
+
+</div>
+</body>
+</html>
