@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>README · HTTP Server in C</title>
+<style>
+  :root {
+    --fg: #1f2328;
+    --muted: #59636e;
+    --bg: #ffffff;
+    --canvas: #f6f8fa;
+    --border: #d1d9e0;
+    --link: #0969da;
+    --code-bg: #f6f8fa;
+    --head-border: #d1d9e0;
+    --table-stripe: #f6f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #f0f6fc;
+      --muted: #9198a1;
+      --bg: #0d1117;
+      --canvas: #161b22;
+      --border: #3d444d;
+      --link: #4493f8;
+      --code-bg: #161b22;
+      --head-border: #3d444d;
+      --table-stripe: #161b22;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+      Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .page {
+    max-width: 980px;
+    margin: 32px auto;
+    padding: 32px 40px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  h1, h2, h3 { line-height: 1.25; font-weight: 600; }
+  h1 {
+    font-size: 2em;
+    margin: 0 0 16px;
+    padding-bottom: .3em;
+    border-bottom: 1px solid var(--head-border);
+  }
+  h2 {
+    font-size: 1.5em;
+    margin: 24px 0 16px;
+    padding-bottom: .3em;
+    border-bottom: 1px solid var(--head-border);
+  }
+  h3 { font-size: 1.25em; margin: 24px 0 16px; }
+  p, ul, ol { margin: 0 0 16px; }
+  ul, ol { padding-left: 2em; }
+  li + li { margin-top: .25em; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+      "Liberation Mono", monospace;
+    font-size: 85%;
+    background: var(--code-bg);
+    padding: .2em .4em;
+    border-radius: 6px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    line-height: 1.45;
+  }
+  pre code {
+    background: transparent;
+    padding: 0;
+    font-size: 100%;
+  }
+  blockquote {
+    margin: 0 0 16px;
+    padding: 0 1em;
+    color: var(--muted);
+    border-left: .25em solid var(--border);
+  }
+  table {
+    border-collapse: collapse;
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0 0 16px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 6px 13px;
+  }
+  th { font-weight: 600; background: var(--table-stripe); }
+  tr:nth-child(2n) td { background: var(--table-stripe); }
+  hr {
+    height: .25em;
+    margin: 24px 0;
+    background: var(--border);
+    border: 0;
+  }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<article class="page">
+
+<h1>HTTP Server in C</h1>
+
+<p>A small, single-process HTTP/1.1 server for POSIX systems that serves static
+files from a configured document root over TCP.</p>
+
+<h2>Build</h2>
+
+<p>Requires a C compiler (<code>cc</code>/<code>gcc</code>), POSIX headers, and <code>make</code>:</p>
+
+<pre><code>make            # builds ./http_server</code></pre>
+
+<p>Without <code>make</code>:</p>
+
+<pre><code>cc -Wall -Wextra -std=c11 -g -Iinclude -o http_server \
+    src/main.c src/startup.c src/parse.c src/response.c src/static_files.c</code></pre>
+
+<h2>Run</h2>
+
+<pre><code>./http_server [--port N] [--root DIR]</code></pre>
+
+<table>
+  <thead>
+    <tr><th>Option</th><th>Default</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>--port N</code></td><td><code>8080</code></td><td>TCP port to listen on (1-65535)</td></tr>
+    <tr><td><code>--root D</code></td><td><code>.</code></td><td>Document root to serve files from</td></tr>
+  </tbody>
+</table>
+
+<p>Example:</p>
+
+<pre><code>./http_server --port 8000 --root /var/www
+curl http://127.0.0.1:8000/index.html</code></pre>
+
+<p>Invalid options, invalid ports, a bad document root (nonexistent or not a
+directory), or socket failures print an error to stderr and exit non-zero.</p>
+
+<h2>Supported behavior</h2>
+
+<ul>
+  <li>Methods: <code>GET</code> and <code>HEAD</code>. Any other valid method gets <code>405 Method Not
+    Allowed</code> with an <code>Allow: GET, HEAD</code> header.</li>
+  <li>One request per connection; the connection is closed after every response
+    (<code>Connection: close</code>).</li>
+  <li><code>Content-Type</code> by extension for html/htm, css, js, json, txt, png, jpg/jpeg,
+    gif, svg, ico, pdf, xml, wasm; anything else is <code>application/octet-stream</code>.</li>
+  <li>Query strings (<code>/file.txt?x=1</code>) are ignored; the path is used.</li>
+  <li>Status codes: <code>200</code>, <code>400</code> (malformed request), <code>404</code> (missing file,
+    directory, or blocked path), <code>405</code>, <code>414</code> (request line too long), <code>431</code>
+    (headers too large), <code>505</code> (unsupported HTTP version).</li>
+  <li>Size limits: request line 8 KiB, total header block 16 KiB
+    (<code>include/common.h</code>).</li>
+  <li>HTTP/1.1 requests must carry exactly one <code>Host</code> header; missing or
+    duplicated host is <code>400</code>, as are header values containing control bytes.</li>
+  <li>Path traversal is blocked twice: <code>..</code> segments are normalized lexically and
+    never allowed above the root, then the path is walked segment by segment
+    from the document root with <code>openat(..., O_NOFOLLOW)</code> — a symlink anywhere
+    in the path (even inside the root) yields <code>404</code>, and there is no window
+    between path check and file open (no TOCTOU). This also makes <code>--root /</code>
+    safe to serve absolute paths.</li>
+  <li>Files up to 64 MiB are read fully before headers go out, so
+    <code>Content-Length</code> always matches the bytes actually sent even if the file
+    changes mid-response; larger files stream without <code>Content-Length</code>
+    (close-delimited).</li>
+  <li>Each accepted connection gets 5-second read/write timeouts: a client that
+    stalls mid-request is answered <code>400</code> and disconnected, so one idle socket
+    cannot freeze the server.</li>
+  <li><code>SIGINT</code>/<code>SIGTERM</code> shut the server down cleanly: the current connection
+    finishes (a stalled one is cut off by the read timeout), the listening
+    socket closes, exit status 0. Client disconnects and interrupted syscalls
+    never crash the server.</li>
+</ul>
+
+<h2>Tests</h2>
+
+<pre><code>make test       # unit tests + smoke/verification scripts (needs curl, python3)
+make check      # -Wpedantic build + ASan/UBSan run of everything</code></pre>
+
+<p>Tests exercise: arg parsing, socket binding, request parsing (partial reads,
+limits, malformed input, Host rules, header value validation), static serving
+(GET/HEAD, 404, 405, traversal, symlinks, root-<code>/</code> serving, large-file
+framing), fd leaks, signal shutdown, and the full curl/raw-socket matrix.</p>
+
+<h2>Known limitations</h2>
+
+<ul>
+  <li>No TLS, no persistent connections (keep-alive), no concurrency: requests are
+    handled one at a time in a single process.</li>
+  <li>No percent-decoding: a file reachable only as <code>%20</code>-encoded URL is not
+    served; encoded traversal sequences are never decoded.</li>
+  <li>No directory index: requesting a directory returns <code>404</code>.</li>
+  <li>Symlinks are never followed, including ones inside the document root
+    (serve real files there instead).</li>
+  <li>No <code>Range</code>, conditional (<code>If-Modified-Since</code>) or caching headers.</li>
+  <li>Response headers per HTTP/1.1 are sent regardless of whether the client
+    asked for HTTP/1.0.</li>
+</ul>
+
+<hr>
+<p class="muted">Served by <code>http_server</code> · doc root <code>/var/www</code></p>
+
+</article>
+</body>
+</html>
