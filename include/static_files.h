@@ -4,6 +4,7 @@
 #include "parse.h"
 
 const char *content_type_for(const char *path);
-int handle_request(int fd, const struct http_request *req, const char *docroot);
+int handle_request(struct conn *c, const struct http_request *req,
+                   const char *docroot);
 
 #endif

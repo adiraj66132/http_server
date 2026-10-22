@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "common.h"
+#include "tls.h"
 
 struct http_request {
     char method[16];
@@ -12,6 +13,6 @@ struct http_request {
 };
 
 int parse_request(const char *buf, size_t len, struct http_request *req);
-int read_request(int fd, struct http_request *req);
+int read_request(struct conn *c, struct http_request *req);
 
 #endif

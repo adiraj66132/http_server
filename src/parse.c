@@ -148,13 +148,13 @@ int parse_request(const char *buf, size_t len, struct http_request *req)
     return 0;
 }
 
-int read_request(int fd, struct http_request *req)
+int read_request(struct conn *c, struct http_request *req)
 {
     char buf[MAX_HEADER_BYTES + 1];
     size_t total = 0;
 
     for (;;) {
-        ssize_t n = recv(fd, buf + total, MAX_HEADER_BYTES - total, 0);
+        ssize_t n = conn_read(c, buf + total, MAX_HEADER_BYTES - total);
         if (n < 0)
             return 400;
         if (n == 0)

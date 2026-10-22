@@ -2,3 +2,5 @@ tests/test_*
 !tests/test_*.c
 /http_server
 tests/*_asan
+/cert.pem
+/key.pem

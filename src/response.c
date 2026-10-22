@@ -19,23 +19,12 @@ const char *http_reason(int code)
     }
 }
 
-int send_all(int fd, const void *buf, size_t n)
+int send_all(struct conn *c, const void *buf, size_t n)
 {
-    const char *p = buf;
-    while (n > 0) {
-        ssize_t w = send(fd, p, n, 0);
-        if (w < 0) {
-            if (errno == EINTR)
-                continue;
-            return -1;
-        }
-        p += w;
-        n -= (size_t)w;
-    }
-    return 0;
+    return conn_send_all(c, buf, n);
 }
 
-int send_error(int fd, int code)
+int send_error(struct conn *c, int code)
 {
     char buf[256];
     int n;
@@ -56,10 +45,10 @@ int send_error(int fd, int code)
                      code, http_reason(code));
     if (n < 0 || (size_t)n >= sizeof(buf))
         return -1;
-    return send_all(fd, buf, (size_t)n);
+    return send_all(c, buf, (size_t)n);
 }
 
-int send_ok_head(int fd, const char *content_type, long long len)
+int send_ok_head(struct conn *c, const char *content_type, long long len)
 {
     char buf[512];
     int n;
@@ -80,5 +69,5 @@ int send_ok_head(int fd, const char *content_type, long long len)
                      content_type, len);
     if (n < 0 || (size_t)n >= sizeof(buf))
         return -1;
-    return send_all(fd, buf, (size_t)n);
+    return send_all(c, buf, (size_t)n);
 }

@@ -115,7 +115,8 @@ static void test_read_request_success(void)
     }
     close(sv[1]);
     struct http_request req;
-    assert(read_request(sv[0], &req) == 0);
+    struct conn c = {sv[0], NULL};
+    assert(read_request(&c, &req) == 0);
     assert(strcmp(req.method, "GET") == 0);
     assert(strcmp(req.target, "/index.html") == 0);
     close(sv[0]);
@@ -130,7 +131,8 @@ static void test_read_request_eof(void)
     assert(write(sv[1], partial, strlen(partial)) == (ssize_t)strlen(partial));
     close(sv[1]);
     struct http_request req;
-    assert(read_request(sv[0], &req) == 400);
+    struct conn c = {sv[0], NULL};
+    assert(read_request(&c, &req) == 400);
     close(sv[0]);
 }
 
@@ -142,7 +144,8 @@ static void test_read_request_oversized(void)
     memset(junk, 'A', sizeof(junk));
     assert(write(sv[1], junk, sizeof(junk)) == (ssize_t)sizeof(junk));
     struct http_request req;
-    assert(read_request(sv[0], &req) == 431);
+    struct conn c = {sv[0], NULL};
+    assert(read_request(&c, &req) == 431);
     close(sv[0]);
     close(sv[1]);
 }

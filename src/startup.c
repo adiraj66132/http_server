@@ -22,6 +22,8 @@ int parse_args(int argc, char **argv, struct server_config *cfg)
 {
     cfg->port = 8080;
     cfg->docroot = ".";
+    cfg->cert = NULL;
+    cfg->key = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--port") == 0) {
@@ -41,11 +43,30 @@ int parse_args(int argc, char **argv, struct server_config *cfg)
             }
             i++;
             cfg->docroot = argv[i];
+        } else if (strcmp(argv[i], "--cert") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "missing value for --cert\n");
+                return -1;
+            }
+            cfg->cert = argv[++i];
+        } else if (strcmp(argv[i], "--key") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "missing value for --key\n");
+                return -1;
+            }
+            cfg->key = argv[++i];
         } else {
             fprintf(stderr, "unknown option: %s\n", argv[i]);
-            fprintf(stderr, "usage: %s [--port N] [--root DIR]\n", argv[0]);
+            fprintf(stderr,
+                    "usage: %s [--port N] [--root DIR] "
+                    "[--cert FILE --key FILE]\n",
+                    argv[0]);
             return -1;
         }
+    }
+    if ((cfg->cert == NULL) != (cfg->key == NULL)) {
+        fprintf(stderr, "--cert and --key must be given together\n");
+        return -1;
     }
     return 0;
 }

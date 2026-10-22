@@ -14,6 +14,8 @@ static void test_defaults(void)
     assert(parse_args(1, argv, &cfg) == 0);
     assert(cfg.port == 8080);
     assert(strcmp(cfg.docroot, ".") == 0);
+    assert(cfg.cert == NULL);
+    assert(cfg.key == NULL);
 }
 
 static void test_custom_options(void)
@@ -55,6 +57,24 @@ static void test_missing_value_rejected(void)
     assert(parse_args(2, argv, &cfg) == -1);
 }
 
+static void test_tls_options(void)
+{
+    char *ok[] = {"srv", "--cert", "cert.pem", "--key", "key.pem"};
+    struct server_config cfg;
+    assert(parse_args(5, ok, &cfg) == 0);
+    assert(strcmp(cfg.cert, "cert.pem") == 0);
+    assert(strcmp(cfg.key, "key.pem") == 0);
+
+    char *cert_only[] = {"srv", "--cert", "cert.pem"};
+    assert(parse_args(3, cert_only, &cfg) == -1);
+
+    char *key_only[] = {"srv", "--key", "key.pem"};
+    assert(parse_args(3, key_only, &cfg) == -1);
+
+    char *no_key_value[] = {"srv", "--cert", "cert.pem", "--key"};
+    assert(parse_args(4, no_key_value, &cfg) == -1);
+}
+
 static int local_port(int fd)
 {
     struct sockaddr_in addr;
@@ -89,6 +109,7 @@ int main(void)
     test_port_out_of_range_rejected();
     test_unknown_option_rejected();
     test_missing_value_rejected();
+    test_tls_options();
     test_listener_binds();
     test_double_bind_fails();
     printf("all tests passed\n");

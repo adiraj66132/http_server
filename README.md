@@ -1,11 +1,12 @@
 # HTTP Server in C
 
 A small, single-process HTTP/1.1 server for POSIX systems that serves static
-files from a configured document root over TCP.
+files from a configured document root over HTTP or HTTPS.
 
 ## Build
 
-Requires a C compiler (`cc`/`gcc`), POSIX headers, and `make`:
+Requires a C compiler (`cc`/`gcc`), POSIX headers, OpenSSL development headers
+(`libssl-dev` on Debian/Ubuntu), and `make`:
 
 ```sh
 make            # builds ./http_server
@@ -15,34 +16,64 @@ Without `make`:
 
 ```sh
 cc -Wall -Wextra -std=c11 -g -Iinclude -o http_server \
-    src/main.c src/startup.c src/parse.c src/response.c src/static_files.c
+    src/main.c src/startup.c src/parse.c src/response.c src/static_files.c \
+    src/tls.c -lssl -lcrypto
 ```
 
 ## Run
 
 ```sh
-./http_server [--port N] [--root DIR]
+./http_server [--port N] [--root DIR] [--cert FILE --key FILE]
 ```
 
-| Option     | Default | Meaning                          |
-|------------|---------|----------------------------------|
-| `--port N` | `8080`  | TCP port to listen on (1-65535)  |
-| `--root D` | `.`     | Document root to serve files from|
+| Option      | Default | Meaning                                   |
+|-------------|---------|-------------------------------------------|
+| `--port N`  | `8080`  | TCP port to listen on (1-65535)           |
+| `--root D`  | `.`     | Document root to serve files from         |
+| `--cert F`  | none    | PEM certificate chain; enables HTTPS      |
+| `--key F`   | none    | PEM private key for `--cert`               |
 
-Example:
+`--cert` and `--key` must be given together. Without them the server speaks
+plain HTTP; with them it requires TLS 1.2 or newer. TLS handshakes use the same
+5-second socket timeouts as requests.
+
+For a local self-signed certificate:
+
+```sh
+make cert       # writes cert.pem and key.pem (gitignored)
+./http_server --port 8443 --root /var/www --cert cert.pem --key key.pem
+curl -k https://127.0.0.1:8443/index.html
+```
+
+`SIGHUP` reloads the certificate and key without dropping the listener:
+
+```sh
+kill -HUP <server-pid>
+```
+
+If the new files are missing, invalid, or do not match, the reload is logged
+and the server keeps serving with the previous certificate.
+
+Plain HTTP example:
 
 ```sh
 ./http_server --port 8000 --root /var/www
 curl http://127.0.0.1:8000/index.html
 ```
 
-Invalid options, invalid ports, a bad document root (nonexistent or not a
-directory), or socket failures print an error to stderr and exit non-zero.
+Invalid options, an invalid port, a bad document root (nonexistent or not a
+directory), unreadable/mismatched certificate material, or socket failures
+print an error to stderr and exit non-zero.
 
 ## Supported behavior
 
 - Methods: `GET` and `HEAD`. Any other valid method gets `405 Method Not
   Allowed` with an `Allow: GET, HEAD` header.
+- HTTP/1.1 over TLS 1.2+ when `--cert`/`--key` are given; TLS compression is
+  disabled and each connection is closed with `close_notify`.
+- ALPN advertises `http/1.1`, including when the client offers `h2` first.
+- `SIGHUP` reloads the certificate/key pair atomically before accepting the
+  next connection; a failed reload keeps the previous pair.
 - One request per connection; the connection is closed after every response
   (`Connection: close`).
 - `Content-Type` by extension for html/htm, css, js, json, txt, png, jpg/jpeg,
@@ -66,8 +97,9 @@ directory), or socket failures print an error to stderr and exit non-zero.
   changes mid-response; larger files stream without `Content-Length`
   (close-delimited).
 - Each accepted connection gets 5-second read/write timeouts: a client that
-  stalls mid-request is answered `400` and disconnected, so one idle socket
-  cannot freeze the server.
+  stalls mid-request or mid-handshake is answered `400` (TLS handshake
+  failures are simply closed) and disconnected, so one idle socket cannot
+  freeze the server.
 - `SIGINT`/`SIGTERM` shut the server down cleanly: the current connection
   finishes (a stalled one is cut off by the read timeout), the listening
   socket closes, exit status 0. Client disconnects and interrupted syscalls
@@ -76,19 +108,25 @@ directory), or socket failures print an error to stderr and exit non-zero.
 ## Tests
 
 ```sh
-make test       # unit tests + smoke/verification scripts (needs curl, python3)
+make test       # unit tests + smoke/verification scripts (needs curl, python3, openssl)
 make check      # -Wpedantic build + ASan/UBSan run of everything
 ```
 
-Tests exercise: arg parsing, socket binding, request parsing (partial reads,
-limits, malformed input, Host rules, header value validation), static serving
-(GET/HEAD, 404, 405, traversal, symlinks, root-`/` serving, large-file
-framing), fd leaks, signal shutdown, and the full curl/raw-socket matrix.
+Tests exercise: arg parsing (including TLS options), socket binding, request
+parsing (partial reads, limits, malformed input, Host rules, header value
+validation), static serving (GET/HEAD, 404, 405, traversal, symlinks, root-`/`
+serving, large-file framing), fd leaks, signal shutdown, the full curl/raw-
+socket matrix, and an HTTPS smoke test (200/404/HEAD over TLS, ALPN
+selection, plain HTTP rejected, live certificate reload including a failed
+reload, bad certificate startup failures).
 
 ## Known limitations
 
-- No TLS, no persistent connections (keep-alive), no concurrency: requests are
-  handled one at a time in a single process.
+- No persistent connections (keep-alive), concurrency, or HTTP/2: requests are
+  handled one at a time in a single process; ALPN only ever selects
+  `http/1.1`.
+- TLS is optional and off by default; the certificate must be supplied by the
+  operator (use a real CA-issued cert in production, not `make cert`).
 - No percent-decoding: a file reachable only as `%20`-encoded URL is not
   served; encoded traversal sequences are never decoded.
 - No directory index: requesting a directory returns `404`.

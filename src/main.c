@@ -16,10 +16,12 @@
 #include "response.h"
 #include "static_files.h"
 #include "startup.h"
+#include "tls.h"
 
 #define CLIENT_IO_TIMEOUT_SEC 5
 
 static volatile sig_atomic_t running = 1;
+static volatile sig_atomic_t reload_certs = 0;
 
 static void on_signal(int sig)
 {
@@ -27,13 +29,10 @@ static void on_signal(int sig)
     running = 0;
 }
 
-static void drain_and_close(int fd)
+static void on_hup(int sig)
 {
-    shutdown(fd, SHUT_WR);
-    char buf[4096];
-    while (recv(fd, buf, sizeof(buf), MSG_DONTWAIT) > 0)
-        ;
-    close(fd);
+    (void)sig;
+    reload_certs = 1;
 }
 
 int main(int argc, char **argv)
@@ -46,6 +45,8 @@ int main(int argc, char **argv)
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+    sa.sa_handler = on_hup;
+    sigaction(SIGHUP, &sa, NULL);
 
     struct server_config cfg;
     if (parse_args(argc, argv, &cfg) != 0)
@@ -59,13 +60,37 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    int lfd = create_listener(cfg.port);
-    if (lfd < 0)
-        return 1;
+    SSL_CTX *tls = NULL;
+    if (cfg.cert != NULL) {
+        tls = tls_init(cfg.cert, cfg.key);
+        if (tls == NULL)
+            return 1;
+    }
 
-    fprintf(stderr, "listening on port %d, root %s\n", cfg.port, cfg.docroot);
+    int lfd = create_listener(cfg.port);
+    if (lfd < 0) {
+        SSL_CTX_free(tls);
+        return 1;
+    }
+
+    fprintf(stderr, "listening on port %d, root %s (%s)\n", cfg.port,
+            cfg.docroot, tls != NULL ? "https" : "http");
 
     for (;;) {
+        if (reload_certs) {
+            reload_certs = 0;
+            if (tls != NULL) {
+                SSL_CTX *fresh = tls_init(cfg.cert, cfg.key);
+                if (fresh != NULL) {
+                    SSL_CTX_free(tls);
+                    tls = fresh;
+                    fprintf(stderr, "tls: reloaded certificate\n");
+                } else {
+                    fprintf(stderr,
+                            "tls: reload failed, keeping previous certificate\n");
+                }
+            }
+        }
         if (!running)
             break;
         int cfd = accept(lfd, NULL, NULL);
@@ -79,15 +104,25 @@ int main(int argc, char **argv)
         setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
         setsockopt(cfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
+        struct conn c = {cfd, NULL};
+        if (tls != NULL) {
+            c.ssl = tls_accept(tls, cfd);
+            if (c.ssl == NULL) {
+                close(cfd);
+                continue;
+            }
+        }
+
         struct http_request req;
-        int rc = read_request(cfd, &req);
+        int rc = read_request(&c, &req);
         if (rc != 0)
-            send_error(cfd, rc);
+            send_error(&c, rc);
         else
-            handle_request(cfd, &req, cfg.docroot);
-        drain_and_close(cfd);
+            handle_request(&c, &req, cfg.docroot);
+        conn_close(&c);
     }
 
     close(lfd);
+    SSL_CTX_free(tls);
     return 0;
 }

@@ -137,13 +137,13 @@ const char *content_type_for(const char *path)
     return "application/octet-stream";
 }
 
-static int send_file_body(int fd, int f, const struct stat *st,
+static int send_file_body(struct conn *c, int f, const struct stat *st,
                           const char *rel, int head_only)
 {
     long long size = (long long)st->st_size;
 
     if (size > MAX_BUFFERED_FILE) {
-        if (send_ok_head(fd, content_type_for(rel), -1) != 0)
+        if (send_ok_head(c, content_type_for(rel), -1) != 0)
             return -1;
         if (head_only)
             return 0;
@@ -157,20 +157,20 @@ static int send_file_body(int fd, int f, const struct stat *st,
             }
             if (r == 0)
                 return 0;
-            if (send_all(fd, buf, (size_t)r) != 0)
+            if (send_all(c, buf, (size_t)r) != 0)
                 return -1;
         }
     }
 
     if (head_only)
-        return send_ok_head(fd, content_type_for(rel), size);
+        return send_ok_head(c, content_type_for(rel), size);
 
     char *buf = NULL;
     size_t got = 0;
     if (size > 0) {
         buf = malloc((size_t)size);
         if (buf == NULL)
-            return send_error(fd, 500);
+            return send_error(c, 500);
         while (got < (size_t)size) {
             ssize_t r = read(f, buf + got, (size_t)size - got);
             if (r < 0) {
@@ -184,33 +184,34 @@ static int send_file_body(int fd, int f, const struct stat *st,
         }
     }
 
-    int rc = send_ok_head(fd, content_type_for(rel), (long long)got);
+    int rc = send_ok_head(c, content_type_for(rel), (long long)got);
     if (rc == 0 && got > 0)
-        rc = send_all(fd, buf, got);
+        rc = send_all(c, buf, got);
     free(buf);
     return rc;
 }
 
-int handle_request(int fd, const struct http_request *req, const char *docroot)
+int handle_request(struct conn *c, const struct http_request *req,
+                   const char *docroot)
 {
     if (strcmp(req->method, "GET") != 0 && strcmp(req->method, "HEAD") != 0)
-        return send_error(fd, 405);
+        return send_error(c, 405);
 
     char rel[PATH_MAX];
     if (normalize(req->target, rel, sizeof(rel)) != 0)
-        return send_error(fd, 404);
+        return send_error(c, 404);
 
     int f = open_under_root(docroot, rel);
     if (f < 0)
-        return send_error(fd, 404);
+        return send_error(c, 404);
 
     struct stat st;
     if (fstat(f, &st) != 0 || !S_ISREG(st.st_mode)) {
         close(f);
-        return send_error(fd, 404);
+        return send_error(c, 404);
     }
 
-    int rc = send_file_body(fd, f, &st, rel, strcmp(req->method, "HEAD") == 0);
+    int rc = send_file_body(c, f, &st, rel, strcmp(req->method, "HEAD") == 0);
     close(f);
     return rc;
 }

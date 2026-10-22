@@ -79,7 +79,8 @@ static size_t do_request_root(const struct http_request *req, char *resp,
 {
     int sv[2];
     assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
-    assert(handle_request(sv[0], req, docroot) == 0);
+    struct conn c = {sv[0], NULL};
+    assert(handle_request(&c, req, docroot) == 0);
     close(sv[0]);
     size_t n = read_all(sv[1], resp, cap);
     close(sv[1]);
@@ -288,7 +289,8 @@ static void test_large_file_no_content_length(void)
         close(sv[1]);
         struct http_request req;
         make_req(&req, "GET", "/big.bin");
-        handle_request(sv[0], &req, root);
+        struct conn c = {sv[0], NULL};
+        handle_request(&c, &req, root);
         close(sv[0]);
         _exit(0);
     }

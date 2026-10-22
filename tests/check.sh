@@ -3,6 +3,7 @@ set -e
 
 CFLAGS="-Wall -Wextra -Wpedantic -std=c11 -g -Iinclude"
 SAN="-fsanitize=address,undefined -fno-sanitize-recover=all"
+LIBS="-lssl -lcrypto"
 
 echo "== pedantic syntax check =="
 for f in src/*.c; do
@@ -12,18 +13,20 @@ done
 echo "== unit tests under ASan/UBSan =="
 cc $CFLAGS $SAN -o tests/test_limits_asan tests/test_limits.c
 cc $CFLAGS $SAN -o tests/test_startup_asan tests/test_startup.c src/startup.c
-cc $CFLAGS $SAN -o tests/test_parse_asan tests/test_parse.c src/parse.c
+cc $CFLAGS $SAN -o tests/test_parse_asan tests/test_parse.c src/parse.c \
+    src/tls.c $LIBS
 cc $CFLAGS $SAN -o tests/test_static_asan tests/test_static.c \
-    src/static_files.c src/response.c
+    src/static_files.c src/response.c src/tls.c $LIBS
 ./tests/test_limits_asan
 ./tests/test_startup_asan
 ./tests/test_parse_asan
 ./tests/test_static_asan
 
 echo "== server under ASan/UBSan =="
-cc $CFLAGS $SAN -o tests/http_server_asan src/*.c
+cc $CFLAGS $SAN -o tests/http_server_asan src/*.c $LIBS
 SERVER=tests/http_server_asan ./tests/smoke_startup.sh
 SERVER=tests/http_server_asan ./tests/smoke_verify.sh
+SERVER=tests/http_server_asan ./tests/smoke_tls.sh
 SERVER=tests/http_server_asan ./tests/smoke_shutdown.sh
 
 echo "check ok"
