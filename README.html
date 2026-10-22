@@ -121,22 +121,24 @@
 <h1>HTTP Server in C</h1>
 
 <p>A small, single-process HTTP/1.1 server for POSIX systems that serves static
-files from a configured document root over TCP.</p>
+files from a configured document root over HTTP or HTTPS.</p>
 
 <h2>Build</h2>
 
-<p>Requires a C compiler (<code>cc</code>/<code>gcc</code>), POSIX headers, and <code>make</code>:</p>
+<p>Requires a C compiler (<code>cc</code>/<code>gcc</code>), POSIX headers, OpenSSL development
+headers (<code>libssl-dev</code> on Debian/Ubuntu), and <code>make</code>:</p>
 
 <pre><code>make            # builds ./http_server</code></pre>
 
 <p>Without <code>make</code>:</p>
 
 <pre><code>cc -Wall -Wextra -std=c11 -g -Iinclude -o http_server \
-    src/main.c src/startup.c src/parse.c src/response.c src/static_files.c</code></pre>
+    src/main.c src/startup.c src/parse.c src/response.c src/static_files.c \
+    src/tls.c -lssl -lcrypto</code></pre>
 
 <h2>Run</h2>
 
-<pre><code>./http_server [--port N] [--root DIR]</code></pre>
+<pre><code>./http_server [--port N] [--root DIR] [--cert FILE --key FILE]</code></pre>
 
 <table>
   <thead>
@@ -145,22 +147,47 @@ files from a configured document root over TCP.</p>
   <tbody>
     <tr><td><code>--port N</code></td><td><code>8080</code></td><td>TCP port to listen on (1-65535)</td></tr>
     <tr><td><code>--root D</code></td><td><code>.</code></td><td>Document root to serve files from</td></tr>
+    <tr><td><code>--cert F</code></td><td>none</td><td>PEM certificate chain; enables HTTPS</td></tr>
+    <tr><td><code>--key F</code></td><td>none</td><td>PEM private key for <code>--cert</code></td></tr>
   </tbody>
 </table>
 
-<p>Example:</p>
+<p><code>--cert</code> and <code>--key</code> must be given together. Without them the server speaks
+plain HTTP; with them it requires TLS 1.2 or newer. TLS handshakes use the same
+5-second socket timeouts as requests.</p>
+
+<p>For a local self-signed certificate:</p>
+
+<pre><code>make cert       # writes cert.pem and key.pem (gitignored)
+./http_server --port 8443 --root /var/www --cert cert.pem --key key.pem
+curl -k https://127.0.0.1:8443/index.html</code></pre>
+
+<p><code>SIGHUP</code> reloads the certificate and key without dropping the listener:</p>
+
+<pre><code>kill -HUP &lt;server-pid&gt;</code></pre>
+
+<p>If the new files are missing, invalid, or do not match, the reload is logged
+and the server keeps serving with the previous certificate.</p>
+
+<p>Plain HTTP example:</p>
 
 <pre><code>./http_server --port 8000 --root /var/www
 curl http://127.0.0.1:8000/index.html</code></pre>
 
-<p>Invalid options, invalid ports, a bad document root (nonexistent or not a
-directory), or socket failures print an error to stderr and exit non-zero.</p>
+<p>Invalid options, an invalid port, a bad document root (nonexistent or not a
+directory), unreadable/mismatched certificate material, or socket failures
+print an error to stderr and exit non-zero.</p>
 
 <h2>Supported behavior</h2>
 
 <ul>
   <li>Methods: <code>GET</code> and <code>HEAD</code>. Any other valid method gets <code>405 Method Not
     Allowed</code> with an <code>Allow: GET, HEAD</code> header.</li>
+  <li>HTTP/1.1 over TLS 1.2+ when <code>--cert</code>/<code>--key</code> are given; TLS compression is
+    disabled and each connection is closed with <code>close_notify</code>.</li>
+  <li>ALPN advertises <code>http/1.1</code>, including when the client offers <code>h2</code> first.</li>
+  <li><code>SIGHUP</code> reloads the certificate/key pair atomically before accepting the
+    next connection; a failed reload keeps the previous pair.</li>
   <li>One request per connection; the connection is closed after every response
     (<code>Connection: close</code>).</li>
   <li><code>Content-Type</code> by extension for html/htm, css, js, json, txt, png, jpg/jpeg,
@@ -184,8 +211,9 @@ directory), or socket failures print an error to stderr and exit non-zero.</p>
     changes mid-response; larger files stream without <code>Content-Length</code>
     (close-delimited).</li>
   <li>Each accepted connection gets 5-second read/write timeouts: a client that
-    stalls mid-request is answered <code>400</code> and disconnected, so one idle socket
-    cannot freeze the server.</li>
+    stalls mid-request or mid-handshake is answered <code>400</code> (TLS handshake
+    failures are simply closed) and disconnected, so one idle socket cannot
+    freeze the server.</li>
   <li><code>SIGINT</code>/<code>SIGTERM</code> shut the server down cleanly: the current connection
     finishes (a stalled one is cut off by the read timeout), the listening
     socket closes, exit status 0. Client disconnects and interrupted syscalls
@@ -194,19 +222,25 @@ directory), or socket failures print an error to stderr and exit non-zero.</p>
 
 <h2>Tests</h2>
 
-<pre><code>make test       # unit tests + smoke/verification scripts (needs curl, python3)
+<pre><code>make test       # unit tests + smoke/verification scripts (needs curl, python3, openssl)
 make check      # -Wpedantic build + ASan/UBSan run of everything</code></pre>
 
-<p>Tests exercise: arg parsing, socket binding, request parsing (partial reads,
-limits, malformed input, Host rules, header value validation), static serving
-(GET/HEAD, 404, 405, traversal, symlinks, root-<code>/</code> serving, large-file
-framing), fd leaks, signal shutdown, and the full curl/raw-socket matrix.</p>
+<p>Tests exercise: arg parsing (including TLS options), socket binding, request
+parsing (partial reads, limits, malformed input, Host rules, header value
+validation), static serving (GET/HEAD, 404, 405, traversal, symlinks, root-<code>/</code>
+serving, large-file framing), fd leaks, signal shutdown, the full curl/raw-
+socket matrix, and an HTTPS smoke test (200/404/HEAD over TLS, ALPN
+selection, plain HTTP rejected, live certificate reload including a failed
+reload, bad certificate startup failures).</p>
 
 <h2>Known limitations</h2>
 
 <ul>
-  <li>No TLS, no persistent connections (keep-alive), no concurrency: requests are
-    handled one at a time in a single process.</li>
+  <li>No persistent connections (keep-alive), concurrency, or HTTP/2: requests are
+    handled one at a time in a single process; ALPN only ever selects
+    <code>http/1.1</code>.</li>
+  <li>TLS is optional and off by default; the certificate must be supplied by the
+    operator (use a real CA-issued cert in production, not <code>make cert</code>).</li>
   <li>No percent-decoding: a file reachable only as <code>%20</code>-encoded URL is not
     served; encoded traversal sequences are never decoded.</li>
   <li>No directory index: requesting a directory returns <code>404</code>.</li>
