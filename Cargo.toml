@@ -1,0 +1,15 @@
+[package]
+name = "http-server"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+
+[dependencies]
+tokio = { version = "1.38", features = ["net", "sync", "time", "io-util", "macros", "rt-multi-thread", "signal"] }
+thiserror = "1.0"
+
+[profile.release]
+debug = true
+
+[profile.dev]
+debug = true
